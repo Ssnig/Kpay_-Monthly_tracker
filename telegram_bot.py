@@ -334,6 +334,23 @@ async def summary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_markdown(msg)
 
+async def backup_db_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Sends a copy of the SQLite database directly to the user in Telegram."""
+    from datetime import datetime
+    db_file = BASE_DIR / "ec_money.db"
+    if not db_file.exists():
+        await update.message.reply_text("Database file not found.")
+        return
+
+    with open(db_file, "rb") as f:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        await update.message.reply_document(
+            document=f,
+            filename=f"ec_money_backup_{timestamp}.db",
+            caption="📦 *EC Money Database Backup*\nKeep this file safe! You can restore it anytime if needed.",
+            parse_mode="Markdown"
+        )
+
 async def list_fees_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Lists all fee campaigns."""
     fees = list_fees()
@@ -738,6 +755,7 @@ def build_application(token: str):
     app.add_handler(CommandHandler("excel", spreadsheet_command))
     app.add_handler(CommandHandler("master_report", master_report_command))
     app.add_handler(CommandHandler("summary", summary_command))
+    app.add_handler(CommandHandler("backup_db", backup_db_command))
     app.add_handler(CommandHandler("fees", list_fees_command))
 
     # Add Student Conversation
@@ -784,9 +802,41 @@ def build_application(token: str):
 
     return app
 
+def start_health_check_server(port: int):
+    """Starts a minimal HTTP server on a daemon thread so Render Web Services detect an open port."""
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    import threading
+
+    class HealthHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(b"EC Money Management Telegram Bot is running!")
+
+        def log_message(self, format, *args):
+            return  # silence access logs to keep console clean
+
+    try:
+        server = HTTPServer(("0.0.0.0", port), HealthHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        logger.info(f"Health check HTTP server listening on port {port}")
+    except Exception as e:
+        logger.warning(f"Could not start health check HTTP server on port {port}: {e}")
+
 def run_bot():
     """Main execution entry point."""
     init_db()  # ensure tables and migrations are ready
+    
+    # Start health check server if PORT is provided (e.g. on Render)
+    port_env = os.getenv("PORT")
+    if port_env:
+        try:
+            start_health_check_server(int(port_env))
+        except ValueError:
+            pass
+
     token = get_bot_token()
     if not token:
         print("\n" + "=" * 60)
