@@ -74,6 +74,98 @@ def init_db(db_path=None, seed_students=True):
     );
     """)
 
+    # Subjects table (for attendance & assignments)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS subjects (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        code TEXT
+    );
+    """)
+
+    # Attendance sessions table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS attendance_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subject_id INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        period TEXT,
+        created_by INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE
+    );
+    """)
+
+    # Attendance records table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS attendance_records (
+        session_id INTEGER NOT NULL,
+        student_id INTEGER NOT NULL,
+        status TEXT CHECK(status IN ('PRESENT', 'ABSENT', 'LEAVE')) DEFAULT 'PRESENT',
+        remarks TEXT,
+        PRIMARY KEY (session_id, student_id),
+        FOREIGN KEY (session_id) REFERENCES attendance_sessions(id) ON DELETE CASCADE,
+        FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+    );
+    """)
+
+    # Teacher announcements table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS announcements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        max_slots INTEGER DEFAULT 0,
+        is_active BOOLEAN DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
+    # Announcement RSVPs / Interest signups table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS announcement_rsvps (
+        announcement_id INTEGER NOT NULL,
+        student_id INTEGER NOT NULL,
+        telegram_user_id INTEGER,
+        signed_up_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (announcement_id, student_id),
+        FOREIGN KEY (announcement_id) REFERENCES announcements(id) ON DELETE CASCADE,
+        FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+    );
+    """)
+
+    # KPay receipt verification table (deduplication & tracking)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS kpay_receipts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        transaction_id TEXT UNIQUE NOT NULL,
+        student_id INTEGER,
+        fee_id INTEGER,
+        payment_id INTEGER,
+        payer_name TEXT,
+        amount REAL NOT NULL,
+        slip_timestamp TEXT,
+        verified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        raw_ai_response TEXT,
+        FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL,
+        FOREIGN KEY (fee_id) REFERENCES fees(id) ON DELETE SET NULL,
+        FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE SET NULL
+    );
+    """)
+
+    # Seed default university subjects if empty
+    cursor.execute("SELECT COUNT(*) AS count FROM subjects")
+    if cursor.fetchone()["count"] == 0:
+        default_subs = [
+            ("Digital Signal Processing", "DSP"),
+            ("Microcontrollers & Embedded Systems", "MCU"),
+            ("Communication Systems", "COMM"),
+            ("Electronic Circuits", "EC"),
+            ("Control Systems", "CS"),
+            ("Professional English", "ENG"),
+        ]
+        cursor.executemany("INSERT OR IGNORE INTO subjects (name, code) VALUES (?, ?)", default_subs)
+
     conn.commit()
 
     if seed_students:

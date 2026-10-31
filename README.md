@@ -1,95 +1,108 @@
-# EC Money Management System & Telegram Bot
+# Class President Super-Bot & Management Platform
 
-A system for managing class funds, dues, payments, student entries across multiple classes, and generating color-coded Excel spreadsheets (.xlsx) showing who has paid and who has not.
+A modular management platform and Telegram bot tailored for **University Class Presidents** and student treasurers.
 
----
-
-## 🚀 Features
-
-1. **Student Entry & Multi-Class Support**
-   - Register students with Roll Number, Name, and Class (e.g. `EC-1`, `EC-2`, `Batch-A`).
-   - Query students by class or search by name / roll number.
-   - Initial 43 students automatically seeded from `rollnum.json`.
-
-2. **Telegram Bot (`telegram_bot.py`)**
-   - Manage students and classes straight from Telegram on your phone.
-   - Create fee collection campaigns (`/createfee`).
-   - Record student payments in real time (`/pay`).
-   - Instantly check fund status: who has paid in full, partially paid, or unpaid (`/status`).
-   - Download color-coded **Excel Spreadsheets (`.xlsx`)** sent directly to your Telegram chat (`/spreadsheet` or `/master_report`).
-   - Easy 1-tap mobile navigation keyboard.
-
-3. **Color-Coded Excel Spreadsheets (`openpyxl`)**
-   - **Fee Status Sheet**: Shows roll number, name, class, target due, amount paid, remaining balance, and visual status:
-     - 🟢 **PAID** (Light green)
-     - 🟡 **PARTIAL** (Light yellow)
-     - 🔴 **UNPAID** (Light red)
-   - **Master Workbook**: Includes 4 formatted sheets:
-     1. Financial Summary & Overview
-     2. Student Funds Matrix (All students & classes tracked against all fees)
-     3. Individual Payment Transactions Log
-     4. Class Expense Records
-
-4. **CLI (`main.py`)**
-   - Interactive terminal menu with full support for student management, fee creation, payment recording, and launching the Telegram bot.
+Automates classroom funds, subject-specific attendance tracking, AI-powered KBZPay payment slip parsing, teacher announcement RSVPs, assignment team randomizing, and color-coded Excel spreadsheet exports.
 
 ---
 
-## 🤖 How to Set Up & Run the Telegram Bot
+## 🚀 Core Features
 
-### Step 1: Get a Bot Token from Telegram
-1. Open Telegram and search for [@BotFather](https://t.me/BotFather).
-2. Send `/newbot` and follow the prompts to choose a name and username (e.g., `ec_money_bot`).
-3. Copy the HTTP API token provided by BotFather (e.g. `123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ`).
+### 1. 🤖 AI-Powered KBZPay Slip Reader (OCR & Deduplication)
+- Students send their **KBZPay transfer screenshots** directly into the Telegram chat.
+- Uses **Google Gemini Multimodal AI** to automatically extract:
+  - **Transaction ID** (guards against duplicate screenshot reuse/fraud)
+  - **Amount Transferred (MMK)**
+  - **Payer Name & Phone**
+  - **Timestamp**
+- **Fuzzy Roster Matching**: Matches the payer's name to the student roster (handles Myanmar & English names) and prompts the president with a 1-tap `[✅ Record Payment]` button.
 
-### Step 2: Configure the Token
-You can provide the token in **any** of the following ways:
+### 2. 📅 On-Demand Subject Attendance Tracker
+- Take attendance for lectures, labs, or workshops whenever requested.
+- Tagged by **Subject**, **Date**, and **Period/Slot**.
+- Quick mobile marking: all students default to **PRESENT**; tap any roll number chip to toggle **ABSENT** or **LEAVE**.
+- Exports directly to styled **Excel spreadsheets (.xlsx)** with attendance rates and color tags.
 
-- **Method A (Prompt on startup)**: Just run `python telegram_bot.py`. It will ask you to enter the token once and save it in `bot_config.json`.
-- **Method B (Config file)**: Create or edit `bot_config.json` in the project root:
-  ```json
-  {
-    "telegram_bot_token": "YOUR_TELEGRAM_BOT_TOKEN_HERE"
-  }
-  ```
-- **Method C (Environment Variable)**:
-  - In PowerShell:
-    ```powershell
-    $env:TELEGRAM_BOT_TOKEN="YOUR_TELEGRAM_BOT_TOKEN_HERE"
-    ```
+### 3. 📢 Teacher Announcements & Interest RSVP Polls
+- Class president broadcasts notices from professors (workshops, hackathons, volunteers).
+- Students tap **`[✋ I'm Interested / Sign Up]`** or **`[❌ Withdraw]`** directly under the message.
+- Tracks real-time participant limits and exports participant lists for the professor.
 
-### Step 3: Start the Bot
-Run:
-```bash
+### 4. 🎲 Assignment & Lab Project Team Randomizer
+- Shuffles students fairly using cryptographic randomness.
+- Generates balanced teams based on target members per team (e.g. 4 members/team) or total team count.
+- Automatically assigns a **`👑 Team Leader`** for each group.
+- Outputs an announcement card ready to share with the class.
+
+### 5. 💰 Treasury Funds & Formatted Spreadsheets
+- Create fee collection campaigns with target amounts and due dates.
+- Real-time **Paid / Partial / Unpaid** tracking.
+- Generates color-coded Excel spreadsheets (.xlsx):
+  - 🟢 **PAID** (Green)
+  - 🟡 **PARTIAL** (Yellow)
+  - 🔴 **UNPAID** (Red)
+- Multi-sheet Master Financial Workbook with summary, student matrix, transactions, and expenses.
+
+### 6. 🛡️ Admin Protection & Multi-Class Packaging
+- Only authorized Class Presidents (`ADMIN_USER_IDS`) can record payments, take attendance, or post announcements.
+- Other students have read-only and self-service access (`/my_status <roll_no>`).
+- Includes a 60-second **Setup Wizard** (`python setup_wizard.py`) so other class presidents can easily adopt and run this platform for their own classes.
+
+---
+
+## 📱 Telegram Commands Reference
+
+| Command | Role | Description |
+|---|---|---|
+| `/start` | Everyone | Open interactive menu with 1-tap keyboard |
+| `/help` | Everyone | View command manual and role badge |
+| `/status [fee_id]` | Everyone | View fund status breakdown (Paid / Unpaid) |
+| `/spreadsheet [fee_id]` | Everyone | Download formatted Excel payment spreadsheet |
+| `/master_report` | Everyone | Download 4-sheet Master Excel Workbook |
+| `/my_status <roll_no>` | Everyone | Student self-service balance & dues check |
+| `/announcements` | Everyone | View active teacher notices and sign-up polls |
+| *Send Photo* | Everyone | Send KBZPay slip screenshot for instant AI parsing |
+| `/pay` | 👑 Admin | Interactive payment recording wizard |
+| `/createfee` | 👑 Admin | Launch a new fee campaign |
+| `/attendance` | 👑 Admin | Start on-demand subject attendance session |
+| `/attendance_export <id>` | 👑 Admin | Download attendance session Excel sheet |
+| `/announce <title> - <text>` | 👑 Admin | Broadcast teacher notice with RSVP buttons |
+| `/teams [size] [subject]` | 👑 Admin | Randomize students into groups with leaders |
+| `/backup_db` | 👑 Admin | Instant SQLite database snapshot sent to chat |
+
+---
+
+## ⚡ Quick Start & Deployment
+
+### 1. Run the Setup Wizard
+```powershell
+python setup_wizard.py
+```
+This configures your Class Name, Admin Telegram IDs, Bot Token, and Gemini API Key.
+
+### 2. Start the Bot Locally
+```powershell
 python telegram_bot.py
 ```
-*(Or run `python main.py` and choose Option `7`)*
+
+### 3. Run the CLI Dashboard
+```powershell
+python main.py
+```
+
+### 4. 24/7 Cloud Deployment (Render)
+1. Push this repository to GitHub.
+2. In [Render.com](https://render.com), create a new **Web Service** from your repo.
+3. Set environment variables:
+   - `TELEGRAM_BOT_TOKEN`: *[Your Bot Token from @BotFather]*
+   - `GEMINI_API_KEY`: *[Your Gemini API Key from Google AI Studio]*
+   - `ADMIN_USER_IDS`: *[Your Telegram User ID from @userinfobot]*
+4. The bot will automatically start its HTTP health-server on `$PORT` and run 24/7!
 
 ---
 
-## 📱 Telegram Bot Commands & Usage
-
-| Command | Description | Example |
-|---|---|---|
-| `/start` | Open interactive welcome screen & persistent menu | `/start` |
-| `/addstudent` | Guided wizard to register student & class | `/addstudent` |
-| `/addstudent <roll> <name> [class]` | Quick student entry | `/addstudent 44 Aung Aung EC-1` |
-| `/students [class]` | List all students or filter by class | `/students` or `/students EC-1` |
-| `/classes` | View list of registered classes & student counts | `/classes` |
-| `/find <query>` | Search students by roll number or name | `/find Aung` |
-| `/fees` | List all fee collection campaigns | `/fees` |
-| `/createfee` | Launch a new fee campaign | `/createfee` |
-| `/createfee <title> <amount>` | Quick fee campaign creation | `/createfee November_Dues 5000` |
-| `/pay` | Step-by-step payment logging | `/pay` |
-| `/pay <fee_id> <roll> <amount>` | Quick record payment | `/pay 1 5 5000` |
-| `/status [fee_id]` | View paid / partial / unpaid breakdown | `/status 1` |
-| `/spreadsheet [fee_id]` | **Download color-coded Excel spreadsheet (.xlsx)** | `/spreadsheet 1` |
-| `/master_report` | **Download 4-sheet Master Excel Workbook** | `/master_report` |
-| `/summary` | View total funds collected, spent, and balance | `/summary` |
-
----
-
-## 🧪 Running Automated Tests
-```bash
-python -m pytest
+## 🧪 Automated Tests
+Run the test suite to verify all services:
+```powershell
+python -m pytest -v
 ```

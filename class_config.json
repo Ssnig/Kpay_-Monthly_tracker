@@ -1,0 +1,20 @@
+{
+  "class_name": "EC",
+  "class_title": "Electronics & Communication Engineering",
+  "admin_telegram_ids": [],
+  "kpay_ai_provider": "local_ocr",
+  "custom_ai_endpoint": "http://localhost:8000/parse_slip",
+  "custom_ai_token": "",
+  "telegram_bot_token": "",
+  "gemini_api_key": "",
+  "default_subjects": [
+    "Digital Signal Processing",
+    "Microcontrollers & Embedded Systems",
+    "Communication Systems",
+    "Electronic Circuits",
+    "Control Systems",
+    "Professional English"
+  ],
+  "google_sheet_url": ""
+}
+

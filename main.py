@@ -376,6 +376,113 @@ def handle_launch_telegram_bot():
     import telegram_bot
     telegram_bot.run_bot()
 
+from services.attendance_service import (
+    list_subjects,
+    add_subject,
+    create_attendance_session,
+    mark_absentees,
+    get_session_details,
+    list_attendance_sessions,
+    export_attendance_excel,
+)
+from services.team_randomizer_service import generate_teams
+
+def handle_attendance_menu():
+    """CLI handler for classroom attendance."""
+    while True:
+        print("\n=== CLASSROOM ATTENDANCE ===")
+        print("1. Take New Attendance Session")
+        print("2. View Past Attendance Sessions")
+        print("3. Export Attendance Sheet to Excel")
+        print("4. Add New Subject")
+        print("0. Back to Main Menu")
+
+        choice = prompt_menu_choice()
+        if choice == "1":
+            subjects = list_subjects()
+            if not subjects:
+                print("No subjects found. Add a subject first.")
+                continue
+            print("\nAvailable Subjects:")
+            for idx, s in enumerate(subjects, 1):
+                print(f"{idx}. {s['name']} ({s.get('code') or 'No Code'})")
+            s_idx_str = input("Select Subject #: ").strip()
+            try:
+                sub = subjects[int(s_idx_str) - 1]
+            except (ValueError, IndexError):
+                print("Invalid selection.")
+                continue
+
+            period = input("Enter Period / Slot [Default: Slot 1]: ").strip() or "Slot 1"
+            sess_id = create_attendance_session(sub["id"], period=period)
+            print(f"\n[Created] Attendance session #{sess_id} for {sub['name']} ({period}). All students set to PRESENT.")
+
+            absent_str = input("Enter roll numbers of ABSENT students (comma-separated, e.g. '3, 12, 25') or leave blank: ").strip()
+            if absent_str:
+                absent_rolls = [int(x.strip()) for x in absent_str.split(",") if x.strip().isdigit()]
+                mark_absentees(sess_id, absent_rolls)
+                print(f"Marked {len(absent_rolls)} student(s) as ABSENT.")
+
+            det = get_session_details(sess_id)
+            print(f"Summary: Present: {det['present_count']} | Absent: {det['absent_count']} | Rate: {det['attendance_rate_percent']}%")
+        elif choice == "2":
+            sessions = list_attendance_sessions(limit=10)
+            if not sessions:
+                print("No attendance sessions recorded yet.")
+                continue
+            rows = [[s["id"], s["date"], s["subject_name"], s["period"], s["present_count"], s["absent_count"]] for s in sessions]
+            print("\n=== RECENT ATTENDANCE SESSIONS ===")
+            print_table(["ID", "Date", "Subject", "Period", "Present", "Absent"], rows)
+        elif choice == "3":
+            s_id_str = input("Enter Attendance Session ID: ").strip()
+            try:
+                sess_id = int(s_id_str)
+            except ValueError:
+                print("Invalid session ID.")
+                continue
+            det = get_session_details(sess_id)
+            if not det:
+                print("Session not found.")
+                continue
+            default_fn = f"attendance_session_{sess_id}_{det['session']['date']}.xlsx"
+            filepath = input(f"Enter filename to save [Default: {default_fn}]: ").strip() or default_fn
+            try:
+                saved = export_attendance_excel(sess_id, filepath)
+                print(f"\n[Success] Attendance sheet exported to: {saved}")
+            except Exception as e:
+                print(f"\n[Error] Export failed: {e}")
+        elif choice == "4":
+            s_name = input("Enter Subject Name: ").strip()
+            if not s_name:
+                continue
+            s_code = input("Enter Subject Code (optional, e.g. 'DSP'): ").strip()
+            sub = add_subject(s_name, s_code)
+            print(f"\n[Success] Subject added: {sub['name']} (#{sub['id']})")
+        elif choice == "0":
+            break
+
+def handle_teams_menu():
+    """CLI handler for team randomizer."""
+    print("\n=== ASSIGNMENT & PROJECT TEAM RANDOMIZER ===")
+    sub_title = input("Enter Subject / Assignment Name (optional): ").strip()
+    size_str = input("Enter Target Members Per Team [Default: 4]: ").strip() or "4"
+    try:
+        group_size = int(size_str)
+    except ValueError:
+        print("Invalid number.")
+        return
+
+    try:
+        res = generate_teams(group_size=group_size, subject_name=sub_title)
+        print("\n" + res["formatted_markdown"])
+    except Exception as e:
+        print(f"Error generating teams: {e}")
+
+def handle_run_setup_wizard():
+    """Launches the Setup Wizard."""
+    import setup_wizard
+    setup_wizard.run_wizard()
+
 def main():
     """Main application loop."""
     # Ensure database and student data are initialized
@@ -383,15 +490,18 @@ def main():
 
     while True:
         print("\n==============================================")
-        print("          EC MONEY MANAGEMENT SYSTEM          ")
+        print("          CLASS PRESIDENT SUPER-PLATFORM       ")
         print("==============================================")
         print("1. Student Directory (Search & Manage Classes)")
         print("2. Fees & Dues Management (Create & View Status)")
         print("3. Record Student Payment")
-        print("4. Class Expense Tracker")
-        print("5. Treasury Financial Overview")
-        print("6. Export Reports (CSV / Excel Spreadsheets)")
-        print("7. Launch Telegram Bot (Collect Entries & Fund Status)")
+        print("4. Subject Attendance Tracker")
+        print("5. Project & Assignment Team Randomizer")
+        print("6. Class Expense Tracker")
+        print("7. Treasury Financial Overview")
+        print("8. Export Spreadsheets & Reports (CSV / Excel)")
+        print("9. Launch Telegram Bot (AI KPay, Attendance, RSVP)")
+        print("10. Run Setup Wizard (Configure Bot for Any Class)")
         print("0. Exit")
         print("==============================================")
 
@@ -411,18 +521,24 @@ def main():
         elif choice == "3":
             handle_record_payment()
         elif choice == "4":
-            handle_expenses()
+            handle_attendance_menu()
         elif choice == "5":
-            handle_financial_summary()
+            handle_teams_menu()
         elif choice == "6":
-            handle_export()
+            handle_expenses()
         elif choice == "7":
+            handle_financial_summary()
+        elif choice == "8":
+            handle_export()
+        elif choice == "9":
             handle_launch_telegram_bot()
+        elif choice == "10":
+            handle_run_setup_wizard()
         elif choice == "0":
-            print("\nThank you for using EC Money Management. Goodbye!")
+            print("\nThank you for using the Class President Platform. Goodbye!")
             sys.exit(0)
         else:
-            print("Invalid choice. Please select an option from 0 to 7.")
+            print("Invalid choice. Please select an option from 0 to 10.")
 
 if __name__ == "__main__":
     main()
