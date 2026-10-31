@@ -24,9 +24,16 @@ def init_db(db_path=None, seed_students=True):
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS students (
         id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL
+        name TEXT NOT NULL,
+        class_name TEXT DEFAULT 'EC'
     );
     """)
+
+    # Migration: check if class_name exists in students table
+    cursor.execute("PRAGMA table_info(students)")
+    columns = [row["name"] for row in cursor.fetchall()]
+    if "class_name" not in columns:
+        cursor.execute("ALTER TABLE students ADD COLUMN class_name TEXT DEFAULT 'EC';")
 
     # Fees table
     cursor.execute("""

@@ -2,7 +2,13 @@ import os
 import tempfile
 import pytest
 from db.database import init_db, get_connection
-from services.student_service import get_student_by_id, list_all_students, search_students
+from services.student_service import (
+    get_student_by_id,
+    list_all_students,
+    search_students,
+    add_or_update_student,
+    list_classes,
+)
 from services.treasury_service import (
     create_fee,
     list_fees,
@@ -13,7 +19,12 @@ from services.treasury_service import (
     list_expenses,
     get_financial_summary
 )
-from services.export_service import export_fee_report_csv, export_financial_summary_csv
+from services.export_service import (
+    export_fee_report_csv,
+    export_financial_summary_csv,
+    export_fee_status_excel,
+    export_full_excel_workbook,
+)
 
 @pytest.fixture
 def temp_db():
@@ -127,3 +138,78 @@ def test_export_reports(temp_db):
             content = f.read()
             assert "Bus advance" in content
             assert "Total Income (Collected)" in content
+
+def test_student_class_entry_and_management(temp_db):
+    """Verify adding/updating student entries per class."""
+    # Add new student to EC-A
+    s1 = add_or_update_student(101, "Kyaw Kyaw", class_name="EC-A", db_path=temp_db)
+    assert s1["id"] == 101
+    assert s1["name"] == "Kyaw Kyaw"
+    assert s1["class_name"] == "EC-A"
+
+    # Add student to EC-B
+    s2 = add_or_update_student(102, "Su Su", class_name="EC-B", db_path=temp_db)
+    assert s2["class_name"] == "EC-B"
+
+    # List classes
+    classes = list_classes(db_path=temp_db)
+    cnames = [c["class_name"] for c in classes]
+    assert "EC-A" in cnames
+    assert "EC-B" in cnames
+
+    # Filter students by class
+    eca_students = list_all_students(class_name="EC-A", db_path=temp_db)
+    assert len(eca_students) == 1
+    assert eca_students[0]["name"] == "Kyaw Kyaw"
+
+    # Update existing student's class
+    add_or_update_student(101, "Kyaw Kyaw", class_name="EC-B", db_path=temp_db)
+    eca_after = list_all_students(class_name="EC-A", db_path=temp_db)
+    assert len(eca_after) == 0
+    ecb_after = list_all_students(class_name="EC-B", db_path=temp_db)
+    assert len(ecb_after) == 2
+
+def test_excel_spreadsheet_fund_status_generation(temp_db):
+    """Verify generating Excel spreadsheet showing who paid and who did not."""
+    import openpyxl
+    fee_id = create_fee("Sports Day Fund", 3000.0, db_path=temp_db)
+    # Student 1 pays in full
+    record_payment(fee_id, 1, 3000.0, db_path=temp_db)
+    # Student 2 pays partial
+    record_payment(fee_id, 2, 1000.0, db_path=temp_db)
+    # Remaining 41 students are unpaid
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        excel_path = os.path.join(tmpdir, "sports_fund_status.xlsx")
+        out_file = export_fee_status_excel(fee_id, excel_path, db_path=temp_db)
+        assert os.path.exists(out_file)
+
+        # Inspect workbook
+        wb = openpyxl.load_workbook(out_file)
+        ws = wb.active
+        assert "Fee #1 Status" in ws.title or "Status" in ws.title
+
+        # Check that table contains student rows
+        # Student 1 should be PAID
+        rows = list(ws.iter_rows(values_only=True))
+        student_rows = [r for r in rows if r[0] in [1, 2, 3]]
+        assert len(student_rows) >= 2
+        # Student 1 row: [1, 'Htet Oo Wai', 'EC', 3000, 3000, 0, 'PAID']
+        s1_row = next(r for r in student_rows if r[0] == 1)
+        assert s1_row[6] == "PAID"
+        assert s1_row[4] == 3000.0
+        assert s1_row[5] == 0.0
+
+        # Student 2 row: [2, ..., 'PARTIAL']
+        s2_row = next(r for r in student_rows if r[0] == 2)
+        assert s2_row[6] == "PARTIAL"
+        assert s2_row[4] == 1000.0
+
+        # Master report export
+        master_path = os.path.join(tmpdir, "master_workbook.xlsx")
+        m_file = export_full_excel_workbook(master_path, db_path=temp_db)
+        assert os.path.exists(m_file)
+        m_wb = openpyxl.load_workbook(m_file)
+        assert "Financial Summary" in m_wb.sheetnames
+        assert "Student Funds Status" in m_wb.sheetnames
+

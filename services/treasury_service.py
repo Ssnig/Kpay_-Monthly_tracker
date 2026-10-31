@@ -58,8 +58,8 @@ def record_payment(fee_id, student_id, amount_paid, remarks="", db_path=None):
     conn.close()
     return payment_id
 
-def get_fee_status(fee_id, db_path=None):
-    """Calculates comprehensive payment tracking status for a specific fee."""
+def get_fee_status(fee_id, class_name=None, db_path=None):
+    """Calculates comprehensive payment tracking status for a specific fee, optionally filtered by class."""
     conn = get_connection(db_path)
     cursor = conn.cursor()
 
@@ -72,8 +72,14 @@ def get_fee_status(fee_id, db_path=None):
     fee = dict(fee_row)
     target_amount = fee["amount_per_student"]
 
-    # Get all students
-    cursor.execute("SELECT id, name FROM students ORDER BY id ASC")
+    # Get students (all or filtered by class)
+    if class_name:
+        cursor.execute(
+            "SELECT id, name, COALESCE(class_name, 'EC') AS class_name FROM students WHERE LOWER(class_name) = LOWER(?) ORDER BY id ASC",
+            (class_name.strip(),)
+        )
+    else:
+        cursor.execute("SELECT id, name, COALESCE(class_name, 'EC') AS class_name FROM students ORDER BY id ASC")
     students = [dict(r) for r in cursor.fetchall()]
 
     # Aggregate payments per student for this fee
@@ -87,7 +93,7 @@ def get_fee_status(fee_id, db_path=None):
     conn.close()
 
     total_expected = target_amount * len(students)
-    total_collected = sum(payments_map.values())
+    total_collected = sum(payments_map.get(s["id"], 0.0) for s in students)
     
     student_records = []
     paid_count = 0
@@ -110,6 +116,7 @@ def get_fee_status(fee_id, db_path=None):
         student_records.append({
             "id": s["id"],
             "name": s["name"],
+            "class_name": s["class_name"],
             "amount_paid": paid,
             "remaining": remaining,
             "status": status
@@ -119,6 +126,7 @@ def get_fee_status(fee_id, db_path=None):
 
     return {
         "fee": fee,
+        "class_filter": class_name,
         "total_students": len(students),
         "target_amount_per_student": target_amount,
         "total_expected": total_expected,

@@ -6,7 +6,13 @@ and expenses for the Electronics & Communication (EC) batch.
 
 import sys
 from db.database import init_db
-from services.student_service import get_student_by_id, list_all_students, search_students
+from services.student_service import (
+    get_student_by_id,
+    list_all_students,
+    search_students,
+    add_or_update_student,
+    list_classes,
+)
 from services.treasury_service import (
     create_fee,
     list_fees,
@@ -17,7 +23,12 @@ from services.treasury_service import (
     list_expenses,
     get_financial_summary
 )
-from services.export_service import export_fee_report_csv, export_financial_summary_csv
+from services.export_service import (
+    export_fee_report_csv,
+    export_financial_summary_csv,
+    export_fee_status_excel,
+    export_full_excel_workbook,
+)
 
 try:
     from tabulate import tabulate
@@ -45,17 +56,37 @@ def handle_students_menu():
     """Sub-menu for student directory."""
     while True:
         print("\n=== STUDENT DIRECTORY ===")
-        print("1. List All Students (1 - 43)")
-        print("2. Search Student by Roll or Name")
+        print("1. List All Students")
+        print("2. Filter Students by Class")
+        print("3. Search Student by Roll or Name")
+        print("4. Add / Register Student Entry for a Class")
         print("0. Back to Main Menu")
 
         choice = prompt_menu_choice()
         if choice == "1":
             students = list_all_students()
-            rows = [[s["id"], s["name"]] for s in students]
+            rows = [[s["id"], s["name"], s.get("class_name", "EC")] for s in students]
             print(f"\nTotal Students: {len(students)}")
-            print_table(["Roll No", "Student Name"], rows)
+            print_table(["Roll No", "Student Name", "Class"], rows)
         elif choice == "2":
+            classes = list_classes()
+            if not classes:
+                print("No classes found.")
+                continue
+            print("\nAvailable Classes:")
+            for idx, c in enumerate(classes, 1):
+                print(f"{idx}. {c['class_name']} ({c['student_count']} students)")
+            c_input = input("Enter class name: ").strip()
+            if not c_input:
+                continue
+            students = list_all_students(class_name=c_input)
+            if not students:
+                print(f"No students found in class '{c_input}'.")
+            else:
+                rows = [[s["id"], s["name"], s.get("class_name", "EC")] for s in students]
+                print(f"\nStudents in {c_input} ({len(students)} total):")
+                print_table(["Roll No", "Student Name", "Class"], rows)
+        elif choice == "3":
             q = input("Enter roll number or partial name: ").strip()
             if not q:
                 continue
@@ -63,9 +94,24 @@ def handle_students_menu():
             if not results:
                 print("No students matched your search.")
             else:
-                rows = [[s["id"], s["name"]] for s in results]
+                rows = [[s["id"], s["name"], s.get("class_name", "EC")] for s in results]
                 print(f"\nFound {len(results)} match(es):")
-                print_table(["Roll No", "Student Name"], rows)
+                print_table(["Roll No", "Student Name", "Class"], rows)
+        elif choice == "4":
+            print("\n--- Register Student Entry ---")
+            r_str = input("Enter Roll Number / ID: ").strip()
+            try:
+                sid = int(r_str)
+            except ValueError:
+                print("Invalid roll number.")
+                continue
+            s_name = input("Enter Student Full Name: ").strip()
+            if not s_name:
+                print("Name cannot be empty.")
+                continue
+            c_name = input("Enter Class (e.g. EC-1, EC-2) [Default: EC]: ").strip() or "EC"
+            res = add_or_update_student(sid, s_name, c_name)
+            print(f"\n[Success] Student saved: Roll #{res['id']} - {res['name']} ({res['class_name']})")
         elif choice == "0":
             break
         else:
@@ -259,10 +305,12 @@ def handle_financial_summary():
     print("==============================================")
 
 def handle_export():
-    """Handles exporting data to CSV."""
-    print("\n=== EXPORT REPORTS ===")
-    print("1. Export Specific Fee Report (Students & Status)")
-    print("2. Export Complete Financial Summary & Expenses")
+    """Handles exporting data to CSV and Excel."""
+    print("\n=== EXPORT REPORTS & SPREADSHEETS ===")
+    print("1. Export Fee Status to Formatted Excel Spreadsheet (.xlsx) [Color Coded: Paid/Unpaid]")
+    print("2. Export Master Multi-Sheet Workbook (.xlsx) [Summary, Matrix, Transactions, Expenses]")
+    print("3. Export Fee Report to CSV")
+    print("4. Export Financial Summary to CSV")
     print("0. Cancel")
 
     choice = prompt_menu_choice()
@@ -279,14 +327,42 @@ def handle_export():
         except ValueError:
             print("Invalid ID.")
             return
+        default_file = f"fee_{fid}_fund_status.xlsx"
+        filepath = input(f"Enter filename to save [Default: {default_file}]: ").strip() or default_file
+        try:
+            saved_path = export_fee_status_excel(fid, filepath)
+            print(f"\n[Success] Formatted Excel spreadsheet saved to: {saved_path}")
+        except Exception as e:
+            print(f"\n[Error] Excel export failed: {e}")
+    elif choice == "2":
+        default_file = "EC_Master_Financial_Workbook.xlsx"
+        filepath = input(f"Enter filename to save [Default: {default_file}]: ").strip() or default_file
+        try:
+            saved_path = export_full_excel_workbook(filepath)
+            print(f"\n[Success] Master Workbook exported to: {saved_path}")
+        except Exception as e:
+            print(f"\n[Error] Master export failed: {e}")
+    elif choice == "3":
+        fees = list_fees()
+        if not fees:
+            print("No fees to export.")
+            return
+        for f in fees:
+            print(f"[{f['id']}] {f['title']}")
+        fid_str = input("Select Fee ID: ").strip()
+        try:
+            fid = int(fid_str)
+        except ValueError:
+            print("Invalid ID.")
+            return
         default_file = f"fee_{fid}_report.csv"
         filepath = input(f"Enter filename to save [Default: {default_file}]: ").strip() or default_file
         try:
             saved_path = export_fee_report_csv(fid, filepath)
-            print(f"\n[Success] Report saved to: {saved_path}")
+            print(f"\n[Success] CSV report saved to: {saved_path}")
         except Exception as e:
             print(f"\n[Error] Export failed: {e}")
-    elif choice == "2":
+    elif choice == "4":
         default_file = "financial_summary.csv"
         filepath = input(f"Enter filename to save [Default: {default_file}]: ").strip() or default_file
         try:
@@ -294,6 +370,11 @@ def handle_export():
             print(f"\n[Success] Summary exported to: {saved_path}")
         except Exception as e:
             print(f"\n[Error] Export failed: {e}")
+
+def handle_launch_telegram_bot():
+    """Starts the Telegram bot directly."""
+    import telegram_bot
+    telegram_bot.run_bot()
 
 def main():
     """Main application loop."""
@@ -304,12 +385,13 @@ def main():
         print("\n==============================================")
         print("          EC MONEY MANAGEMENT SYSTEM          ")
         print("==============================================")
-        print("1. Student Directory (Search & View)")
+        print("1. Student Directory (Search & Manage Classes)")
         print("2. Fees & Dues Management (Create & View Status)")
         print("3. Record Student Payment")
         print("4. Class Expense Tracker")
         print("5. Treasury Financial Overview")
-        print("6. Export Reports (CSV / Excel)")
+        print("6. Export Reports (CSV / Excel Spreadsheets)")
+        print("7. Launch Telegram Bot (Collect Entries & Fund Status)")
         print("0. Exit")
         print("==============================================")
 
@@ -334,11 +416,13 @@ def main():
             handle_financial_summary()
         elif choice == "6":
             handle_export()
+        elif choice == "7":
+            handle_launch_telegram_bot()
         elif choice == "0":
             print("\nThank you for using EC Money Management. Goodbye!")
             sys.exit(0)
         else:
-            print("Invalid choice. Please select an option from 0 to 6.")
+            print("Invalid choice. Please select an option from 0 to 7.")
 
 if __name__ == "__main__":
     main()
